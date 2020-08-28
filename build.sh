@@ -2,7 +2,7 @@
 
 set -e
 
-export OPTIMIZE="-Os"
+export OPTIMIZE="-O3"
 export LDFLAGS=${OPTIMIZE}
 export CFLAGS=${OPTIMIZE}
 export CXXFLAGS=${OPTIMIZE}
@@ -52,6 +52,27 @@ echo "============================================="
   # Move artifacts
   mv $ENTRY_POINT ../dist/index.js
   mv rnnoise.wasm ../dist/
+
+  # Compile librnnoise generated LLVM bytecode to wasm with SIMD
+  export OPTIMIZE="-msimd128 -O3"
+  emconfigure ./configure CFLAGS="${OPTIMIZE}" --enable-static=no --disable-examples --disable-doc
+  emmake make clean
+  emmake make V=1
+
+  emcc \
+    ${OPTIMIZE} \
+    -s STRICT=1 \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -s MALLOC=emmalloc \
+    -s MODULARIZE=1 \
+    -s ENVIRONMENT="web,worker" \
+    -s EXPORT_ES6=1 \
+    -s USE_ES6_IMPORT_META=0 \
+    -s EXPORTED_FUNCTIONS="['_rnnoise_process_frame', '_rnnoise_init', '_rnnoise_destroy', '_rnnoise_create', '_malloc', '_free']" \
+    .libs/librnnoise.${SO_SUFFIX} \
+    -o ./$ENTRY_POINT
+
+  mv rnnoise.wasm ../dist/rnnoise-simd.wasm
 
   # Clean cluttter
   git clean -f -d
